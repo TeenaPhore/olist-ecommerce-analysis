@@ -387,3 +387,73 @@ WHERE EXTRACT(YEAR FROM order_purchase_timestamp) = 2017
 GROUP BY customer_id
 HAVING COUNT(order_id) > 1
 ORDER BY total_orders DESC;
+
+-- =====================================================
+-- 12. Repeat Customer Rate
+-- =====================================================
+
+-- Calculate the percentage of customers who placed
+-- more than one order during 2017.
+
+WITH all_orders AS (
+    SELECT
+        customer_id,
+        COUNT(order_id) AS total_orders
+    FROM orders
+    WHERE EXTRACT(YEAR FROM order_purchase_timestamp) = 2017
+    GROUP BY customer_id
+),
+customer_summary AS (
+    SELECT
+        COUNT(*) AS total_customers,
+        SUM(
+            CASE
+                WHEN total_orders > 1 THEN 1
+                ELSE 0
+            END
+        ) AS repeat_customers
+    FROM all_orders
+)
+SELECT
+    total_customers,
+    repeat_customers,
+    ROUND(
+        100.0 * repeat_customers / NULLIF(total_customers, 0),
+        2
+    ) AS repeat_customer_rate
+FROM customer_summary;
+
+-- =====================================================
+-- 13. Top Customers by Delivered Revenue
+-- =====================================================
+
+-- Identify customers with the highest spending
+-- on delivered orders, including ties at rank 10.
+
+WITH customer_revenue AS (
+    SELECT
+        o.customer_id,
+        SUM(oi.price) AS total_spending
+    FROM orders o
+    JOIN order_items oi
+        ON o.order_id = oi.order_id
+    WHERE o.order_status = 'delivered'
+    GROUP BY o.customer_id
+),
+ranking_customers AS (
+    SELECT
+        customer_id,
+        total_spending,
+        RANK() OVER (
+            ORDER BY total_spending DESC
+        ) AS revenue_rank
+    FROM customer_revenue
+)
+SELECT
+    customer_id,
+    total_spending,
+    revenue_rank
+FROM ranking_customers
+WHERE revenue_rank <= 10
+ORDER BY revenue_rank;
+
